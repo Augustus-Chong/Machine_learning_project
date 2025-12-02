@@ -6,9 +6,9 @@ from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
 import os
 
-BATCH_SIZE = 64
-LEARNING_RATE = 0.01
-EPOCHS = 5
+BATCH_SIZE = 128
+LEARNING_RATE = 0.005
+EPOCHS = 20
 DOWNLOAD_ROOT = './mnist_data'
 INPUT_SIZE = 28 * 28
 NUM_CLASSES = 10
@@ -43,10 +43,10 @@ def get_data_loaders(root, batch_size):
 
     return train_loader, test_loader
 
-class LogisticRegression(nn.module):
+class LogisticRegression(nn.Module):
     def __init__(self, input_size, num_classes):
         super().__init__()
-        self.Linear = nn.Linear(input_size, num_classes)
+        self.linear = nn.Linear(input_size, num_classes)
 
     def forward(self, x):
         x = x.view(x.size(0), -1) #flatten image into vector
@@ -57,7 +57,7 @@ def train_model(model, train_loader, criterion, optimizer, epochs, device):
     model.train()
     loss_history = []
     for epoch in range(epochs):
-        for batch_idx, (images, lables) in enumerate(train_loader):
+        for batch_idx, (images, labels) in enumerate(train_loader):
             images, labels = images.to(device), labels.to(device)
             optimizer.zero_grad() #flush out previous gradients + initialization grads
             outputs = model(images) #Forward Pass
@@ -92,4 +92,22 @@ def evaluate_model(model, test_loader, device):
 if __name__ == '__main__':
     #Get dataloaders
     train_loader, test_loader = get_data_loaders(DOWNLOAD_ROOT, BATCH_SIZE)
-    
+    #Initialize model
+    model = LogisticRegression(INPUT_SIZE, NUM_CLASSES).to(device)
+    #Define loss function
+    criterion  = nn.CrossEntropyLoss()
+    #Define optimizer
+    optimizer = optim.SGD(model.parameters(), lr=LEARNING_RATE)
+
+    #Train the model
+    loss_data = train_model(model, train_loader, criterion, optimizer, EPOCHS, device)
+    #Evaluate model
+    evaluate_model(model, test_loader, device)
+
+    #visualing loss
+    plt.figure(figsize=(10, 5))
+    plt.plot(loss_data)
+    plt.title("Loss over Training Steps")
+    plt.xlabel("Training Step (x100 batches)")
+    plt.ylabel("Loss")
+    plt.show()
