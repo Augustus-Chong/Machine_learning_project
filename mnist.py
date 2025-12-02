@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torchvision import datasets, transforms
-from torch.utils.data import dataloader
+from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
 import os
 
@@ -15,3 +15,81 @@ NUM_CLASSES = 10
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
+
+def get_data_loaders(root, batch_size):
+    transform = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize((0.1307,), (0.3081,)) 
+    ])
+    is_downloaded = os.path.isdir(root)
+
+    train_dataset = datasets.MNIST( #Training dataset
+        root=root, 
+        train=True,         
+        download=not is_downloaded, 
+        transform=transform 
+    )
+
+    test_dataset = datasets.MNIST( #Test dataset
+        root=root,
+        train=False,        
+        download=not is_downloaded, 
+        transform=transform 
+    )
+
+    #dataloaders for batching and shuffing
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+
+    return train_loader, test_loader
+
+class LogisticRegression(nn.module):
+    def __init__(self, input_size, num_classes):
+        super().__init__()
+        self.Linear = nn.Linear(input_size, num_classes)
+
+    def forward(self, x):
+        x = x.view(x.size(0), -1) #flatten image into vector
+        out = self.linear(x)
+        return out
+    
+def train_model(model, train_loader, criterion, optimizer, epochs, device):
+    model.train()
+    loss_history = []
+    for epoch in range(epochs):
+        for batch_idx, (images, lables) in enumerate(train_loader):
+            images, labels = images.to(device), labels.to(device)
+            optimizer.zero_grad() #flush out previous gradients + initialization grads
+            outputs = model(images) #Forward Pass
+            loss = criterion(outputs, labels) #compute loss
+            loss.backward() #Backward pass, computes gradients
+            optimizer.step() #update weights using the optimizer chosen
+
+            if (batch_idx + 1) % 100 == 0:
+                print(f'Epoch [{epoch+1}/{epochs}], Step [{batch_idx+1}/{len(train_loader)}], Loss: {loss.item():.4f}')
+                loss_history.append(loss.item())
+    return loss_history
+
+def evaluate_model(model, test_loader, device):
+    model.eval()
+    total_correct = 0
+    total_samples  =0
+
+    with torch.no_grad():
+        for images, labels in test_loader:
+            images, labels = images.to(device), labels.to(device)
+
+            outputs = model(images) #forward pass
+            _, predicted = torch.max(outputs.data, 1)
+
+            total_samples += labels.size(0)
+            total_correct += (predicted ==labels).sum().item()
+
+    accuracy = total_correct / total_samples
+    print(f'\nTest Accuracy: {100 * accuracy:.2f}%')
+    return accuracy
+
+if __name__ == '__main__':
+    #Get dataloaders
+    train_loader, test_loader = get_data_loaders(DOWNLOAD_ROOT, BATCH_SIZE)
+    
