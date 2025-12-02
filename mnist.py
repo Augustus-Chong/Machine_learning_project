@@ -10,7 +10,7 @@ import torch.nn.functional as F
 
 BATCH_SIZE = 64
 LEARNING_RATE = 0.001
-EPOCHS = 30
+EPOCHS = 50
 DOWNLOAD_ROOT = './mnist_data'
 INPUT_SIZE = 28 * 28
 NUM_CLASSES = 10
@@ -75,6 +75,8 @@ class MLP(nn.Module):
         # Second Linear transformation to output scores
         out = self.fc2(x)
         return out
+    
+
     
 def train_model(model, train_loader, criterion, optimizer, epochs, device):
     model.train()
