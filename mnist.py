@@ -6,12 +6,14 @@ from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
 import os
 
-BATCH_SIZE = 128
+BATCH_SIZE = 64
 LEARNING_RATE = 0.005
 EPOCHS = 20
 DOWNLOAD_ROOT = './mnist_data'
 INPUT_SIZE = 28 * 28
 NUM_CLASSES = 10
+CUSTOM_IMAGE_PATH = 'custom_digit.png' 
+MODEL_SAVE_PATH = 'logistic_model.pth'
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
@@ -89,25 +91,47 @@ def evaluate_model(model, test_loader, device):
     print(f'\nTest Accuracy: {100 * accuracy:.2f}%')
     return accuracy
 
+def save_model(model, path):
+    torch.save(model.state_dict(), path)
+    print(f"\nModel weights saved to {path}")
+
+def load_model(model, path, device):
+    if os.path.exists(path):
+        model.load_state_dict(torch.load(path, map_location=device))
+        model.eval()
+        print(f"\nModel weights successfully loaded from {path}")
+        return True
+    return False
+
 if __name__ == '__main__':
     #Get dataloaders
     train_loader, test_loader = get_data_loaders(DOWNLOAD_ROOT, BATCH_SIZE)
     #Initialize model
     model = LogisticRegression(INPUT_SIZE, NUM_CLASSES).to(device)
-    #Define loss function
-    criterion  = nn.CrossEntropyLoss()
-    #Define optimizer
-    optimizer = optim.SGD(model.parameters(), lr=LEARNING_RATE)
 
-    #Train the model
-    loss_data = train_model(model, train_loader, criterion, optimizer, EPOCHS, device)
-    #Evaluate model
-    evaluate_model(model, test_loader, device)
+    #load saved weights
+    is_loaded = load_model(model, MODEL_SAVE_PATH, device)
 
-    #visualing loss
-    plt.figure(figsize=(10, 5))
-    plt.plot(loss_data)
-    plt.title("Loss over Training Steps")
-    plt.xlabel("Training Step (x100 batches)")
-    plt.ylabel("Loss")
-    plt.show()
+    if not is_loaded:
+        #Define loss function
+        criterion  = nn.CrossEntropyLoss()
+        #Define optimizer
+        optimizer = optim.SGD(model.parameters(), lr=LEARNING_RATE)
+
+        #Train the model
+        loss_data = train_model(model, train_loader, criterion, optimizer, EPOCHS, device)
+        #Evaluate model
+        evaluate_model(model, test_loader, device)
+
+        #visualing loss
+        plt.figure(figsize=(10, 5))
+        plt.plot(loss_data)
+        plt.title("Loss over Training Steps")
+        plt.xlabel("Training Step (x100 batches)")
+        plt.ylabel("Loss")
+        plt.show()
+    else:
+        print("\nSkipping training as weights were loaded.")
+        evaluate_model(model, test_loader, device)
+
+    predict_custom_image(model, CUSTOM_IMAGE_PATH, device)
