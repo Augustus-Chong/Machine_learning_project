@@ -10,13 +10,14 @@ import torch.nn.functional as F
 
 BATCH_SIZE = 64
 LEARNING_RATE = 0.001
-EPOCHS = 50
+EPOCHS = 100
 DOWNLOAD_ROOT = './mnist_data'
 INPUT_SIZE = 28 * 28
 NUM_CLASSES = 10
 CUSTOM_IMAGE_PATH = 'custom_digit.png' 
-MODEL_SAVE_PATH = 'mlp_model.pth'
+MODEL_SAVE_PATH = 'resnet2_model.pth'
 HIDDEN_SIZE = 128
+NUM_RESIDUAL_BLOCKS = 3
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
@@ -76,8 +77,49 @@ class MLP(nn.Module):
         out = self.fc2(x)
         return out
     
+class ResidualBlock(nn.Module):
+    def __init__(self, dim):
+        super().__init__()
+        self.fc1 = nn.Linear(dim, dim)
+        self.relu = nn.ReLU()
+        self.fc2 = nn.Linear(dim, dim)
 
+    def forward(self, x):
+        identity = x
+        # Finding F(x)
+        out = self.fc1(x)
+        out = self.relu(out)
+        out = self.fc2(out)
+
+        # Adding x, Output = F(x) + x
+        out += identity 
+
+        # Final activation
+        out = self.relu(out)
+        return out
     
+class MinimalResNet(nn.Module):
+    def __init__(self, input_size, hidden_size, num_classes, num_blocks):
+        super().__init__()
+
+        #Inital projection layer, (Input 784 -> Hidden Size)
+        self.initial_layer = nn.Linear(input_size, hidden_size)
+
+        # Stack of Residual Blocks
+        self.res_blocks = nn.Sequential(*[ResidualBlock(hidden_size) for _ in range(num_blocks)])
+
+        # Final classification layer (Hidden Size -> Output 10)
+        self.final_layer = nn.Linear(hidden_size, num_classes)
+    
+    def forward(self, x):
+        x = x.view(x.size(0), -1)
+
+        x = F.relu(self.initial_layer(x))
+        x = self.res_blocks(x)
+        out = self.final_layer(x)
+        return out
+
+
 def train_model(model, train_loader, criterion, optimizer, epochs, device):
     model.train()
     loss_history = []
@@ -115,27 +157,54 @@ def evaluate_model(model, test_loader, device):
     return accuracy
 
 def predict_custom_image(model, image_path, device):
+    """Loads a single image, preprocesses it robustly, and makes a prediction."""
     if not os.path.exists(image_path):
         print(f"\n--- ERROR: Custom image '{image_path}' not found! ---")
+        print("Please draw a digit, save it as a PNG file, and ensure it is in the same directory.")
         return
+
+    print(f"\n--- Predicting Custom Image: {image_path} ---")
     
     try:
-        image = Image.open(image_path).convert('L')
+        # Load and convert to grayscale
+        image = Image.open(image_path).convert('L') 
     except Exception as e:
         print(f"Failed to load image: {e}")
         return
-    
-    #Make transformations match the training data
+
+    # Transformations for custom image: Resize to 28x28 and convert to Tensor
     custom_transform = transforms.Compose([
         transforms.Resize((28, 28)),
+        transforms.Grayscale(num_output_channels=1), # Ensure one channel
         transforms.ToTensor(),
-        transforms.Normalize((0.1307,), (0.3081,))
+        # We handle normalization manually to ensure correct black/white mapping
     ])
-    image_tensor = custom_transform(image).unsqueeze(0).to(device)
+    
+    image_tensor = custom_transform(image).unsqueeze(0)
+    
+    # --- Critical Inversion and Normalization ---
+    # Check the mean pixel value: if it's very low (dark background), the white digit is
+    # represented by 0s, which is the reverse of what the model was trained on.
+    if image_tensor.mean() < 0.5:
+        # Invert the image: 1 - x (white becomes black, black becomes white)
+        image_tensor = 1 - image_tensor 
+
+    # Apply the standard MNIST normalization after potential inversion
+    # Normalization: (x - mean) / std
+    mean_tensor = torch.tensor([0.1307]).view(1, 1, 1, 1)
+    std_tensor = torch.tensor([0.3081]).view(1, 1, 1, 1)
+    image_tensor = (image_tensor - mean_tensor) / std_tensor
+    
+    image_tensor = image_tensor.to(device)
+    
     model.eval()
+    
     with torch.no_grad():
         output = model(image_tensor)
-    probabilities = F.softmax(output, dim=1)
+    
+    # Calculate probabilities using Softmax
+    probabilities = F.softmax(output, dim=1) 
+    
     _, predicted_class_tensor = torch.max(output, 1)
     predicted_class = predicted_class_tensor.item()
     
@@ -143,10 +212,9 @@ def predict_custom_image(model, image_path, device):
     
     print(f"Model prediction: The digit is {predicted_class}")
     print(f"Confidence: {confidence:.2f}%")
-    print(f"All class probabilities: {probabilities.squeeze().tolist()}")
+    # print(f"All class probabilities: {probabilities.squeeze().tolist()}")
     
     return predicted_class
-
 
 def save_model(model, path):
     torch.save(model.state_dict(), path)
@@ -164,8 +232,9 @@ if __name__ == '__main__':
     #Get dataloaders
     train_loader, test_loader = get_data_loaders(DOWNLOAD_ROOT, BATCH_SIZE)
     #Initialize model
-    model = MLP(INPUT_SIZE, HIDDEN_SIZE, NUM_CLASSES).to(device)
     #model = LogisticRegression(INPUT_SIZE, NUM_CLASSES).to(device)
+    #model = MLP(INPUT_SIZE, HIDDEN_SIZE, NUM_CLASSES).to(device)
+    model = MinimalResNet(INPUT_SIZE, HIDDEN_SIZE, NUM_CLASSES, NUM_RESIDUAL_BLOCKS).to(device)
 
     #load saved weights
     is_loaded = load_model(model, MODEL_SAVE_PATH, device)
