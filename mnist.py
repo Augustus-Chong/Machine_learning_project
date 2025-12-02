@@ -5,10 +5,12 @@ from torchvision import datasets, transforms
 from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
 import os
+from PIL import Image 
+import torch.nn.functional as F
 
-BATCH_SIZE = 64
-LEARNING_RATE = 0.005
-EPOCHS = 20
+BATCH_SIZE = 16
+LEARNING_RATE = 0.0001
+EPOCHS = 40
 DOWNLOAD_ROOT = './mnist_data'
 INPUT_SIZE = 28 * 28
 NUM_CLASSES = 10
@@ -91,6 +93,40 @@ def evaluate_model(model, test_loader, device):
     print(f'\nTest Accuracy: {100 * accuracy:.2f}%')
     return accuracy
 
+def predict_custom_image(model, image_path, device):
+    if not os.path.exists(image_path):
+        print(f"\n--- ERROR: Custom image '{image_path}' not found! ---")
+        return
+    
+    try:
+        image = Image.open(image_path).convert('L')
+    except Exception as e:
+        print(f"Failed to load image: {e}")
+        return
+    
+    #Make transformations match the training data
+    custom_transform = transforms.Compose([
+        transforms.Resize((28, 28)),
+        transforms.ToTensor(),
+        transforms.Normalize((0.1307,), (0.3081,))
+    ])
+    image_tensor = custom_transform(image).unsqueeze(0).to(device)
+    model.eval()
+    with torch.no_grad():
+        output = model(image_tensor)
+    probabilities = F.softmax(output, dim=1)
+    _, predicted_class_tensor = torch.max(output, 1)
+    predicted_class = predicted_class_tensor.item()
+    
+    confidence = probabilities[0][predicted_class].item() * 100
+    
+    print(f"Model prediction: The digit is {predicted_class}")
+    print(f"Confidence: {confidence:.2f}%")
+    print(f"All class probabilities: {probabilities.squeeze().tolist()}")
+    
+    return predicted_class
+
+
 def save_model(model, path):
     torch.save(model.state_dict(), path)
     print(f"\nModel weights saved to {path}")
@@ -117,9 +153,11 @@ if __name__ == '__main__':
         criterion  = nn.CrossEntropyLoss()
         #Define optimizer
         optimizer = optim.SGD(model.parameters(), lr=LEARNING_RATE)
+       
 
         #Train the model
         loss_data = train_model(model, train_loader, criterion, optimizer, EPOCHS, device)
+        save_model(model, MODEL_SAVE_PATH)
         #Evaluate model
         evaluate_model(model, test_loader, device)
 
