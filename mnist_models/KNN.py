@@ -150,6 +150,7 @@ def load_model(path):
         return data['model'], data['scaler']
     return None, None
 
+
 # --- Main Execution ---
 if __name__ == '__main__':
     # Get all data as flat NumPy arrays

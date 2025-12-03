@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import os
 from PIL import Image 
 import torch.nn.functional as F
+import numpy as np
 
 BATCH_SIZE = 64
 LEARNING_RATE = 0.001
@@ -202,6 +203,45 @@ def load_model(model, path, device):
         return True
     return False
 
+def plot_loss(loss_data, window=10):
+    """
+    Plots the raw loss and a smoothed version for clearer convergence analysis.
+    The plot also focuses on the later training steps.
+    """
+    
+    # 1. Calculate Moving Average for Smoothing
+    loss_np = np.array(loss_data)
+    # Pads the start with the first value so the smoothed curve starts at index 0
+    padded_loss = np.pad(loss_np, (window-1, 0), mode='edge')
+    smoothed_loss = np.convolve(padded_loss, np.ones(window)/window, mode='valid')
+    
+    # 2. Define Zoom Range
+    # Start plotting at 30% of the total training steps to skip the steep initial drop
+    zoom_start_index = int(len(loss_data) * 0.3) 
+    
+    
+    plt.figure(figsize=(12, 6))
+
+    # Plot 1: Smoothed Loss (Main Trend)
+    plt.plot(smoothed_loss, label=f'Smoothed Loss (Window={window})', color='darkorange', linewidth=2)
+    
+    # Plot 2: Raw Loss (Volatility check)
+    plt.plot(loss_data, label='Raw Loss (Volatility)', color='skyblue', alpha=0.3)
+    
+    # Optional: Plot 3: Zoomed in section (for extra clarity)
+    plt.plot(np.arange(zoom_start_index, len(loss_data)), 
+             smoothed_loss[zoom_start_index:], 
+             label='Zoomed Trend', color='red', linestyle='--')
+    
+    plt.grid(axis="both", linewidth=1, color="lightgrey", linestyle="dashed")
+    plt.title("Loss over Training Steps: Trend vs. Volatility")
+    plt.xlabel(f"Training Step (x100 batches) [Total Steps: {len(loss_data)}]")
+    plt.ylabel("Loss")
+    plt.legend()
+    plt.grid(True, alpha=0.6)
+    plt.show()
+
+
 if __name__ == '__main__':
     #Get dataloaders
     train_loader, test_loader = get_data_loaders(DOWNLOAD_ROOT, BATCH_SIZE)
@@ -225,12 +265,7 @@ if __name__ == '__main__':
         evaluate_model(model, test_loader, device)
 
         #visualing loss
-        plt.figure(figsize=(10, 5))
-        plt.plot(loss_data)
-        plt.title("Loss over Training Steps")
-        plt.xlabel("Training Step (x100 batches)")
-        plt.ylabel("Loss")
-        plt.show()
+        plot_loss(loss_data, window=20)
     else:
         print("\nSkipping training as weights were loaded.")
         evaluate_model(model, test_loader, device)
