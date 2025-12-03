@@ -9,6 +9,7 @@ from PIL import Image
 import torch.nn.functional as F
 import numpy as np
 from sklearn.metrics import classification_report
+import time
 
 BATCH_SIZE = 64
 LEARNING_RATE = 0.001
@@ -245,9 +246,12 @@ if __name__ == '__main__':
         #Define optimizer
         optimizer = optim.SGD(model.parameters(), lr=LEARNING_RATE)
        
-
+        start_time = time.time()
         #Train the model
         loss_data = train_model(model, train_loader, criterion, optimizer, EPOCHS, device)
+
+        end_time = time.time()
+
         save_model(model, MODEL_SAVE_PATH)
         #Evaluate model
         evaluate_model(model, test_loader, device)

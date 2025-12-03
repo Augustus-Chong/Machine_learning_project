@@ -9,10 +9,11 @@ from PIL import Image
 import torch.nn.functional as F
 import numpy as np
 from sklearn.metrics import classification_report
+import time
 
 BATCH_SIZE = 64
 LEARNING_RATE = 0.001
-EPOCHS = 100
+EPOCHS = 20
 DOWNLOAD_ROOT = './mnist_data'
 INPUT_SIZE = 28 * 28
 NUM_CLASSES = 10
@@ -244,6 +245,8 @@ def plot_loss(loss_data, window=10):
              label='Zoomed Trend', color='red', linestyle='--')
     
     plt.grid(axis="both", linewidth=1, color="lightgrey", linestyle="dashed")
+    plt.minorticks_on()
+
     plt.title("Loss over Training Steps: Trend vs. Volatility")
     plt.xlabel(f"Training Step (x100 batches) [Total Steps: {len(loss_data)}]")
     plt.ylabel("Loss")
@@ -267,9 +270,12 @@ if __name__ == '__main__':
         #Define optimizer
         optimizer = optim.SGD(model.parameters(), lr=LEARNING_RATE)
        
-
+        start_time = time.time()
         #Train the model
         loss_data = train_model(model, train_loader, criterion, optimizer, EPOCHS, device)
+
+        end_time = time.time()
+
         save_model(model, MODEL_SAVE_PATH)
         #Evaluate model
         evaluate_model(model, test_loader, device)
