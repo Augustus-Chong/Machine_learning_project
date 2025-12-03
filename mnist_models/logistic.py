@@ -17,8 +17,7 @@ INPUT_SIZE = 28 * 28
 NUM_CLASSES = 10
 CUSTOM_IMAGE_PATH = 'custom_digit.png' 
 MODEL_SAVE_PATH = 'mnist_saves/logistic_model.pth'
-HIDDEN_SIZE = 128
-NUM_RESIDUAL_BLOCKS = 3
+
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
