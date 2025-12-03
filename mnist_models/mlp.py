@@ -15,7 +15,7 @@ DOWNLOAD_ROOT = './mnist_data'
 INPUT_SIZE = 28 * 28
 NUM_CLASSES = 10
 CUSTOM_IMAGE_PATH = 'custom_digit.png' 
-MODEL_SAVE_PATH = 'resnet2_model.pth'
+MODEL_SAVE_PATH = 'mnist_saves/mlp_model.pth'
 HIDDEN_SIZE = 128
 NUM_RESIDUAL_BLOCKS = 3
 
@@ -49,16 +49,6 @@ def get_data_loaders(root, batch_size):
 
     return train_loader, test_loader
 
-class LogisticRegression(nn.Module):
-    def __init__(self, input_size, num_classes):
-        super().__init__()
-        self.linear = nn.Linear(input_size, num_classes)
-
-    def forward(self, x):
-        x = x.view(x.size(0), -1) #flatten image into vector
-        out = self.linear(x)
-        return out
-
 class MLP(nn.Module):
     def __init__(self, input_size, hidden_size, num_classes):
         super().__init__()
@@ -76,49 +66,6 @@ class MLP(nn.Module):
         # Second Linear transformation to output scores
         out = self.fc2(x)
         return out
-    
-class ResidualBlock(nn.Module):
-    def __init__(self, dim):
-        super().__init__()
-        self.fc1 = nn.Linear(dim, dim)
-        self.relu = nn.ReLU()
-        self.fc2 = nn.Linear(dim, dim)
-
-    def forward(self, x):
-        identity = x
-        # Finding F(x)
-        out = self.fc1(x)
-        out = self.relu(out)
-        out = self.fc2(out)
-
-        # Adding x, Output = F(x) + x
-        out += identity 
-
-        # Final activation
-        out = self.relu(out)
-        return out
-    
-class MinimalResNet(nn.Module):
-    def __init__(self, input_size, hidden_size, num_classes, num_blocks):
-        super().__init__()
-
-        #Inital projection layer, (Input 784 -> Hidden Size)
-        self.initial_layer = nn.Linear(input_size, hidden_size)
-
-        # Stack of Residual Blocks
-        self.res_blocks = nn.Sequential(*[ResidualBlock(hidden_size) for _ in range(num_blocks)])
-
-        # Final classification layer (Hidden Size -> Output 10)
-        self.final_layer = nn.Linear(hidden_size, num_classes)
-    
-    def forward(self, x):
-        x = x.view(x.size(0), -1)
-
-        x = F.relu(self.initial_layer(x))
-        x = self.res_blocks(x)
-        out = self.final_layer(x)
-        return out
-
 
 def train_model(model, train_loader, criterion, optimizer, epochs, device):
     model.train()
@@ -167,6 +114,7 @@ def predict_custom_image(model, image_path, device):
     
     try:
         # Load and convert to grayscale
+        # We perform initial conversion here
         image = Image.open(image_path).convert('L') 
     except Exception as e:
         print(f"Failed to load image: {e}")
@@ -175,18 +123,20 @@ def predict_custom_image(model, image_path, device):
     # Transformations for custom image: Resize to 28x28 and convert to Tensor
     custom_transform = transforms.Compose([
         transforms.Resize((28, 28)),
-        transforms.Grayscale(num_output_channels=1), # Ensure one channel
+        # Apply a strict binary threshold (0 or 255) to mimic crisp MNIST lines
+        transforms.Lambda(lambda x: x.point(lambda p: 0 if p < 128 else 255)),
         transforms.ToTensor(),
-        # We handle normalization manually to ensure correct black/white mapping
     ])
     
     image_tensor = custom_transform(image).unsqueeze(0)
     
     # --- Critical Inversion and Normalization ---
-    # Check the mean pixel value: if it's very low (dark background), the white digit is
-    # represented by 0s, which is the reverse of what the model was trained on.
+    # The ToTensor conversion changes pixel range from 0-255 to 0.0-1.0
+    
+    # Check if image needs to be inverted (if background is dark, mean will be low)
+    # MNIST digits are represented by high values (close to 1.0)
     if image_tensor.mean() < 0.5:
-        # Invert the image: 1 - x (white becomes black, black becomes white)
+        # Invert: white becomes black, black becomes white
         image_tensor = 1 - image_tensor 
 
     # Apply the standard MNIST normalization after potential inversion
@@ -212,7 +162,6 @@ def predict_custom_image(model, image_path, device):
     
     print(f"Model prediction: The digit is {predicted_class}")
     print(f"Confidence: {confidence:.2f}%")
-    # print(f"All class probabilities: {probabilities.squeeze().tolist()}")
     
     return predicted_class
 
@@ -232,9 +181,7 @@ if __name__ == '__main__':
     #Get dataloaders
     train_loader, test_loader = get_data_loaders(DOWNLOAD_ROOT, BATCH_SIZE)
     #Initialize model
-    #model = LogisticRegression(INPUT_SIZE, NUM_CLASSES).to(device)
-    #model = MLP(INPUT_SIZE, HIDDEN_SIZE, NUM_CLASSES).to(device)
-    model = MinimalResNet(INPUT_SIZE, HIDDEN_SIZE, NUM_CLASSES, NUM_RESIDUAL_BLOCKS).to(device)
+    model = MLP(INPUT_SIZE, HIDDEN_SIZE, NUM_CLASSES).to(device)
 
     #load saved weights
     is_loaded = load_model(model, MODEL_SAVE_PATH, device)
