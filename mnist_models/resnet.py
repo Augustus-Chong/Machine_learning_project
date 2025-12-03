@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from Model_Base import run_model
+import torch.nn.functional as F
 
 
 BATCH_SIZE = 64

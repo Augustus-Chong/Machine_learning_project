@@ -223,3 +223,26 @@ def run_model(model, BATCH_SIZE, EPOCHS, LEARNING_RATE, DOWNLOAD_ROOT, MODEL_SAV
         evaluate_model(model, test_loader, device)
 
     predict_custom_image(model, CUSTOM_IMAGE_PATH, device)
+
+def load_model(model, MODEL_PATH, device):
+    """Loads the trained model weights."""
+    if os.path.exists(MODEL_PATH):
+        model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
+        model.eval()
+        return model
+    raise FileNotFoundError(f"ResNet model weights not found at {MODEL_PATH}. Please train and save it first.")
+
+def predict(model, input_tensor):
+    """Predicts using the PyTorch model."""
+    with torch.no_grad():
+        output = model(input_tensor)
+        probabilities = F.softmax(output, dim=1)
+        _, predicted_class_tensor = torch.max(output, 1)
+        
+        predicted_class = predicted_class_tensor.item()
+        confidence = probabilities[0][predicted_class].item() * 100
+        
+        print(f"MODEL: ")
+        print(f"  Prediction: {predicted_class}")
+        print(f"  Confidence: {confidence:.2f}%")
+        print("-" * 50)
