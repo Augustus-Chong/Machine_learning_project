@@ -6,14 +6,14 @@ import torch.nn.functional as F
 from Model_Base import run_model
 BATCH_SIZE = 64
 LEARNING_RATE = 0.001
-EPOCHS = 10
+EPOCHS = 17
 DOWNLOAD_ROOT = './mnist_data'
 INPUT_SIZE = 28 * 28
 NUM_CLASSES = 10
 CUSTOM_IMAGE_PATH = 'custom_digit.png' 
 MODEL_SAVE_PATH = 'mnist_saves/mlp_model.pth'
 HIDDEN_SIZE = 128
-NUM_RESIDUAL_BLOCKS = 3
+
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
@@ -39,4 +39,4 @@ class MLP(nn.Module):
 if __name__ == '__main__':
     #Initialize model
     model = MLP(INPUT_SIZE, HIDDEN_SIZE, NUM_CLASSES).to(device)
-    run_model(model, BATCH_SIZE, EPOCHS, LEARNING_RATE, DOWNLOAD_ROOT, MODEL_SAVE_PATH, device, CUSTOM_IMAGE_PATH)
+    run_model(model, BATCH_SIZE, EPOCHS, LEARNING_RATE, NUM_CLASSES, DOWNLOAD_ROOT, MODEL_SAVE_PATH, device, CUSTOM_IMAGE_PATH)

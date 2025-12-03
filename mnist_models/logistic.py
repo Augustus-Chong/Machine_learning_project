@@ -5,7 +5,7 @@ from Model_Base import run_model
 
 BATCH_SIZE = 64
 LEARNING_RATE = 0.001
-EPOCHS = 100
+EPOCHS = 15
 DOWNLOAD_ROOT = './mnist_data'
 INPUT_SIZE = 28 * 28
 NUM_CLASSES = 10
@@ -31,4 +31,4 @@ class LogisticRegression(nn.Module):
 if __name__ == '__main__':
     #Initialize model
     model = LogisticRegression(INPUT_SIZE, NUM_CLASSES).to(device)
-    run_model(model, BATCH_SIZE, EPOCHS, LEARNING_RATE, DOWNLOAD_ROOT, MODEL_SAVE_PATH, device, CUSTOM_IMAGE_PATH)
+    run_model(model, BATCH_SIZE, EPOCHS, LEARNING_RATE, NUM_CLASSES, DOWNLOAD_ROOT, MODEL_SAVE_PATH, device, CUSTOM_IMAGE_PATH)

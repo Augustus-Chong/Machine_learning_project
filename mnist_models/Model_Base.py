@@ -8,7 +8,7 @@ import os
 from PIL import Image 
 import torch.nn.functional as F
 import numpy as np
-from sklearn.metrics import classification_report
+from sklearn.metrics import classification_report, confusion_matrix
 import time
 
 def get_data_loaders(root, batch_size):
@@ -59,11 +59,11 @@ def train_model(model, train_loader, criterion, optimizer, epochs, device):
     print(f"\nTraining Complete in {training_duration:.2f} seconds.")
     return loss_history
 
-def evaluate_model(model, test_loader, device):
-    """Evaluates the model on the test dataset and prints detailed metrics."""
+def evaluate_model(model, test_loader, device, NUM_CLASSES):
+    """Evaluates the model on the test dataset and prints detailed metrics, including per-class accuracy."""
     model.eval() 
-    y_true = [] # To store all true labels
-    y_pred = [] # To store all predicted labels
+    y_true = [] 
+    y_pred = [] 
     total_correct = 0
     total_samples = 0
     
@@ -73,8 +73,7 @@ def evaluate_model(model, test_loader, device):
             outputs = model(images)
             _, predicted = torch.max(outputs.data, 1)
             
-            # Store results for classification_report
-            y_true.extend(labels.cpu().numpy()) # Move to CPU and convert to NumPy array
+            y_true.extend(labels.cpu().numpy())
             y_pred.extend(predicted.cpu().numpy())
             
             total_samples += labels.size(0)
@@ -84,8 +83,33 @@ def evaluate_model(model, test_loader, device):
     print(f'\n--- Evaluation Results ---')
     print(f'Overall Accuracy: {100 * accuracy:.2f}%')
     
-    # Generate and print the comprehensive classification report
-    print("\nDetailed Classification Report:")
+    # --- Detailed Per-Class Metrics ---
+    
+    # 1. Get the Confusion Matrix
+    cm = confusion_matrix(y_true, y_pred)
+    
+    # 2. Extract True Positives (TP) from the diagonal
+    correct_per_class = cm.diagonal()
+    
+    # 3. Extract Total Samples (Support) for each class
+    total_per_class = cm.sum(axis=1) # Sum of actual rows in the confusion matrix
+    
+    # 4. Calculate Per-Class Accuracy (TP / Total Samples)
+    class_accuracy = correct_per_class / total_per_class
+    
+    # 5. Print custom accuracy table
+    print("\nPer-Class Accuracy:")
+    print("---------------------------------")
+    print(" Class | Total Samples | Accuracy ")
+    print("---------------------------------")
+    
+    for i in range(NUM_CLASSES):
+        print(f"   {i}   |     {total_per_class[i]:<10} | {class_accuracy[i]*100:.2f}%")
+        
+    print("---------------------------------")
+    
+    # 6. Generate and print the comprehensive classification report
+    print("\nDetailed Classification Report (Precision, Recall, F1-Score):")
     target_names = [str(i) for i in range(NUM_CLASSES)]
     print(classification_report(y_true, y_pred, target_names=target_names))
     
@@ -118,7 +142,7 @@ def predict_custom_image(model, image_path, device):
         # Define the simplified transformation pipeline
         simple_transform = transforms.Compose([
             transforms.Resize((28, 28)), # Safety resize to 28x28
-            transforms.ToTensor(),       # Converts to Tensor and scales 0-1
+            transforms.ToTensor(),  # Converts to Tensor and scales 0-1
         ])
         
         image_tensor = simple_transform(image).unsqueeze(0)
@@ -126,15 +150,6 @@ def predict_custom_image(model, image_path, device):
     except Exception as e:
         print(f"Failed to preprocess or predict custom image: {e}")
         return
-
-    # --- Critical Inversion and Normalization ---
-    # We keep the inversion check as a final safety measure against black/white reversal
-    if image_tensor.mean() < 0.5:
-        image_tensor = 1 - image_tensor 
-
-    mean_tensor = torch.tensor([0.1307]).view(1, 1, 1, 1)
-    std_tensor = torch.tensor([0.3081]).view(1, 1, 1, 1)
-    image_tensor = (image_tensor - mean_tensor) / std_tensor
     
     image_tensor = image_tensor.to(device)
     
@@ -150,8 +165,22 @@ def predict_custom_image(model, image_path, device):
     
     confidence = probabilities[0][predicted_class].item() * 100
     
-    print(f"Model prediction: The digit is {predicted_class}")
-    print(f"Confidence: {confidence:.2f}%")
+    # Extract probabilities as a flat list and format them
+    all_confidences = probabilities.squeeze().cpu().numpy()
+    
+    print(f"\nPrediction Result:")
+    print(f"-> Predicted Digit: {predicted_class}")
+    print(f"-> Highest Confidence: {confidence:.2f}%")
+    print("-" * 30)
+    print("Class | Confidence")
+    print("-" * 30)
+
+    # Print the confidence for all 10 classes
+    for i, conf in enumerate(all_confidences):
+        # Highlight the winning class
+        marker = " <--- WINNER" if i == predicted_class else ""
+        print(f"  {i}   | {conf * 100:.2f}%{marker}")
+    print("-" * 30)
     
     return predicted_class
 
@@ -186,8 +215,6 @@ def plot_loss(loss_data, window=10):
              label='Zoomed Trend', color='red', linestyle='--')
     
     plt.grid(axis="both", linewidth=1, color="lightgrey", linestyle="dashed")
-    plt.gca().set_xticks(np.arange(0, 1.0, 0.05))
-
 
     plt.title("Loss over Training Steps: Trend vs. Volatility")
     plt.xlabel(f"Training Step (x100 batches) [Total Steps: {len(loss_data)}]")
@@ -196,7 +223,7 @@ def plot_loss(loss_data, window=10):
     plt.grid(True, alpha=0.6)
     plt.show()
 
-def run_model(model, BATCH_SIZE, EPOCHS, LEARNING_RATE, DOWNLOAD_ROOT, MODEL_SAVE_PATH, device, CUSTOM_IMAGE_PATH):
+def run_model(model, BATCH_SIZE, EPOCHS, LEARNING_RATE, NUMBER_CLASSES, DOWNLOAD_ROOT, MODEL_SAVE_PATH, device, CUSTOM_IMAGE_PATH):
     #Get dataloaders
     train_loader, test_loader = get_data_loaders(DOWNLOAD_ROOT, BATCH_SIZE)
     
@@ -207,24 +234,24 @@ def run_model(model, BATCH_SIZE, EPOCHS, LEARNING_RATE, DOWNLOAD_ROOT, MODEL_SAV
         #Define loss function
         criterion  = nn.CrossEntropyLoss()
         #Define optimizer
-        optimizer = optim.SGD(model.parameters(), lr=LEARNING_RATE)
+        optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
        
         #Train the model
         loss_data = train_model(model, train_loader, criterion, optimizer, EPOCHS, device)
 
         save_model(model, MODEL_SAVE_PATH)
         #Evaluate model
-        evaluate_model(model, test_loader, device)
+        evaluate_model(model, test_loader, device, NUMBER_CLASSES)
 
         #visualing loss
         plot_loss(loss_data, window=20)
     else:
         print("\nSkipping training as weights were loaded.")
-        evaluate_model(model, test_loader, device)
+        evaluate_model(model, test_loader, device, NUMBER_CLASSES)
 
     predict_custom_image(model, CUSTOM_IMAGE_PATH, device)
 
-def load_model(model, MODEL_PATH, device):
+def load_model2(model, MODEL_PATH, device):
     """Loads the trained model weights."""
     if os.path.exists(MODEL_PATH):
         model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
