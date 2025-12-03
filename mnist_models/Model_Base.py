@@ -195,3 +195,31 @@ def plot_loss(loss_data, window=10):
     plt.legend()
     plt.grid(True, alpha=0.6)
     plt.show()
+
+def run_model(model, BATCH_SIZE, EPOCHS, LEARNING_RATE, DOWNLOAD_ROOT, MODEL_SAVE_PATH, device, CUSTOM_IMAGE_PATH):
+    #Get dataloaders
+    train_loader, test_loader = get_data_loaders(DOWNLOAD_ROOT, BATCH_SIZE)
+    
+    #load saved weights
+    is_loaded = load_model(model, MODEL_SAVE_PATH, device)
+
+    if not is_loaded:
+        #Define loss function
+        criterion  = nn.CrossEntropyLoss()
+        #Define optimizer
+        optimizer = optim.SGD(model.parameters(), lr=LEARNING_RATE)
+       
+        #Train the model
+        loss_data = train_model(model, train_loader, criterion, optimizer, EPOCHS, device)
+
+        save_model(model, MODEL_SAVE_PATH)
+        #Evaluate model
+        evaluate_model(model, test_loader, device)
+
+        #visualing loss
+        plot_loss(loss_data, window=20)
+    else:
+        print("\nSkipping training as weights were loaded.")
+        evaluate_model(model, test_loader, device)
+
+    predict_custom_image(model, CUSTOM_IMAGE_PATH, device)
