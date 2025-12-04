@@ -17,13 +17,13 @@ from Model_Base import load_model2, predict
 CUSTOM_IMAGE_PATH = 'custom_digit.png' 
 MODEL_PATH_RESNET = 'mnist_saves/resnet_model.pth' 
 MODEL_PATH_MLP = 'mnist_saves/mlp_model.pth' 
-MODEL_PATH_LOGISTIC = 'mnist_saves/logistic_model.pth' 
+MODEL_PATH_LOGISTIC = 'mnist_saves/logistic_model1.pth' 
 
 # Architectural parameters (must match training)
 INPUT_SIZE = 28*28
 HIDDEN_SIZE = 128
 NUM_CLASSES = 10     
-NUM_RESIDUAL_BLOCKS = 5
+NUM_RESIDUAL_BLOCKS = 3
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")

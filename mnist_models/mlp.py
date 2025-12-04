@@ -4,14 +4,14 @@ import torch.optim as optim
 import torch.nn.functional as F
 
 from Model_Base import run_model
-BATCH_SIZE = 128
+BATCH_SIZE = 64
 LEARNING_RATE = 0.001
-EPOCHS = 40
+EPOCHS = 15
 DOWNLOAD_ROOT = './mnist_data'
 INPUT_SIZE = 28 * 28
 NUM_CLASSES = 10
 CUSTOM_IMAGE_PATH = 'custom_digit.png' 
-MODEL_SAVE_PATH = 'mnist_saves/mlp_model.pth'
+MODEL_SAVE_PATH = 'mnist_saves/mlp_model1.pth'
 HIDDEN_SIZE = 128
 
 

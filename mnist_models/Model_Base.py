@@ -59,65 +59,11 @@ def train_model(model, train_loader, criterion, optimizer, epochs, device):
     print(f"\nTraining Complete in {training_duration:.2f} seconds.")
     return loss_history
 
-def evaluate_model(model, test_loader, device, NUM_CLASSES):
-    """Evaluates the model on the test dataset and prints detailed metrics, including per-class accuracy."""
-    model.eval() 
-    y_true = [] 
-    y_pred = [] 
-    total_correct = 0
-    total_samples = 0
-    
-    with torch.no_grad():
-        for images, labels in test_loader:
-            images, labels = images.to(device), labels.to(device)
-            outputs = model(images)
-            _, predicted = torch.max(outputs.data, 1)
-            
-            y_true.extend(labels.cpu().numpy())
-            y_pred.extend(predicted.cpu().numpy())
-            
-            total_samples += labels.size(0)
-            total_correct += (predicted == labels).sum().item()
-
-    accuracy = total_correct / total_samples
-    print(f'\n--- Evaluation Results ---')
-    print(f'Overall Accuracy: {100 * accuracy:.2f}%')
-    
-    # --- Detailed Per-Class Metrics ---
-    
-    # 1. Get the Confusion Matrix
-    cm = confusion_matrix(y_true, y_pred)
-    
-    # 2. Extract True Positives (TP) from the diagonal
-    correct_per_class = cm.diagonal()
-    
-    # 3. Extract Total Samples (Support) for each class
-    total_per_class = cm.sum(axis=1) # Sum of actual rows in the confusion matrix
-    
-    # 4. Calculate Per-Class Accuracy (TP / Total Samples)
-    class_accuracy = correct_per_class / total_per_class
-    
-    # 5. Print custom accuracy table
-    print("\nPer-Class Accuracy:")
-    print("---------------------------------")
-    print(" Class | Total Samples | Accuracy ")
-    print("---------------------------------")
-    
-    for i in range(NUM_CLASSES):
-        print(f"   {i}   |     {total_per_class[i]:<10} | {class_accuracy[i]*100:.2f}%")
-        
-    print("---------------------------------")
-    
-    # 6. Generate and print the comprehensive classification report
-    print("\nDetailed Classification Report (Precision, Recall, F1-Score):")
-    target_names = [str(i) for i in range(NUM_CLASSES)]
-    print(classification_report(y_true, y_pred, target_names=target_names))
-    
-    return accuracy
-
 def save_model(model, path):
     torch.save(model.state_dict(), path)
     print(f"\nModel weights saved to {path}")
+
+
 
 def load_model(model, path, device):
     if os.path.exists(path):
@@ -127,10 +73,76 @@ def load_model(model, path, device):
         return True
     return False
 
+def evaluate_model(model, test_loader, device, NUM_CLASSES):
+    """Evaluates the model and plots a high-contrast accuracy chart."""
+    model.eval() 
+    y_true = [] 
+    y_pred = [] 
+    
+    with torch.no_grad():
+        for images, labels in test_loader:
+            images, labels = images.to(device), labels.to(device)
+            outputs = model(images)
+            _, predicted = torch.max(outputs.data, 1)
+            y_true.extend(labels.cpu().numpy())
+            y_pred.extend(predicted.cpu().numpy())
+
+    # --- Metrics ---
+    cm = confusion_matrix(y_true, y_pred)
+    correct_per_class = cm.diagonal()
+    total_per_class = cm.sum(axis=1)
+    class_accuracy = correct_per_class / total_per_class
+    overall_accuracy = np.mean(class_accuracy) # Macro average for coloring logic
+
+    print(f'\nOverall Accuracy: {100 * overall_accuracy:.4f}%')
+    target_names = [str(i) for i in range(NUM_CLASSES)]
+    print(classification_report(y_true, y_pred, target_names=target_names, digits=4))
+
+    # --- IMPROVED PLOTTING ---
+    plt.figure(figsize=(10, 6))
+    
+    # 1. Define Colors based on performance relative to average
+    colors = []
+    for acc in class_accuracy:
+        if acc < overall_accuracy - 0.02: # significantly below average
+            colors.append('salmon') # Red-ish
+        elif acc < overall_accuracy:      # slightly below
+            colors.append('gold')   # Yellow
+        else:
+            colors.append('lightgreen') # Good
+            
+    bars = plt.bar(range(NUM_CLASSES), class_accuracy * 100, color=colors, edgecolor='black')
+    
+    plt.title(f'Accuracy per Digit Class (Avg: {overall_accuracy*100:.1f}%)')
+    plt.xlabel('Digit Class')
+    plt.ylabel('Accuracy (%)')
+    plt.xticks(range(NUM_CLASSES))
+    
+    # 2. Zoom in the Y-Axis to show differences
+    # Start 5% below the worst class, capped at 0
+    lowest_acc = min(class_accuracy) * 100
+    plt.ylim(max(0, lowest_acc - 5), 100.5) 
+    
+    # 3. Add Average Line
+    plt.axhline(y=overall_accuracy*100, color='blue', linestyle='--', alpha=0.5, label='Average Accuracy')
+    plt.legend()
+
+    # Labels on bars
+    for bar in bars:
+        height = bar.get_height()
+        plt.text(bar.get_x() + bar.get_width()/2., height + 0.2,
+                 f'{height:.1f}%', ha='center', va='bottom', fontsize=10, fontweight='bold')
+
+    plt.grid(axis='y', linestyle='--', alpha=0.3)
+    plt.show()
+    
+    return overall_accuracy
+
 def predict_custom_image(model, image_path, device):
     """
-    Loads a custom image, applies the EXACT same preprocessing as MNIST training
-    (Resize -> ToTensor -> Inversion Check -> Normalize), and predicts with confidence.
+    Loads a custom image, applies the STRICT MNIST protocol 
+    (Crop -> Scale to 20x20 -> Center in 28x28 -> Normalize), 
+    and predicts with confidence.
     """
     if not os.path.exists(image_path):
         print(f"\n--- ERROR: Custom image '{image_path}' not found! ---")
@@ -142,40 +154,70 @@ def predict_custom_image(model, image_path, device):
         # 1. Load and convert to grayscale
         image = Image.open(image_path).convert('L') 
         
-        # 2. Resize and Convert to Tensor (Scales pixels to 0.0 - 1.0)
-        simple_transform = transforms.Compose([
-            transforms.Resize((28, 28)), 
-            transforms.ToTensor(), 
-        ])
+        # 2. Thresholding (Make it binary to find bounding box easily)
+        # This forces the digit to be white (255) and background black (0)
+        image = image.point(lambda p: 0 if p < 128 else 255)
+
+        # 3. Smart Crop & Scale (The MNIST Protocol)
+        # Find the bounding box of the non-zero (white) pixels
+        bbox = image.getbbox()
         
-        # Add batch dimension: Shape becomes (1, 1, 28, 28)
-        image_tensor = simple_transform(image).unsqueeze(0)
+        if bbox:
+            # Crop the digit to the tightest rectangle
+            crop = image.crop(bbox)
+            
+            # Calculate scale factor to fit into a 20x20 box (leaving 4px padding)
+            width, height = crop.size
+            if width > height:
+                new_width = 20
+                new_height = int(height * (20 / width))
+            else:
+                new_height = 20
+                new_width = int(width * (20 / height))
+                
+            # Resize the cropped digit using high-quality resampling
+            crop_resized = crop.resize((new_width, new_height), Image.Resampling.LANCZOS)
+            
+            # Create a blank 28x28 black canvas
+            final_image = Image.new('L', (28, 28), 0)
+            
+            # Paste the resized digit into the center of the canvas
+            paste_x = (28 - new_width) // 2
+            paste_y = (28 - new_height) // 2
+            final_image.paste(crop_resized, (paste_x, paste_y))
+        else:
+            # If image is empty, just return a black 28x28 square
+            final_image = image.resize((28, 28))
+
+        # 4. Convert to Tensor (Scales pixels to 0.0 - 1.0)
+        to_tensor = transforms.ToTensor()
+        image_tensor = to_tensor(final_image).unsqueeze(0)
         
     except Exception as e:
         print(f"Failed to preprocess or predict custom image: {e}")
         return
 
-    # 3. Inversion Check 
-    # (Ensures digit is white/high-value and background is black/low-value)
-    #if image_tensor.mean() < 0.5:
-    #    image_tensor = 1 - image_tensor 
+    # 5. Inversion Check (Optional if you trust the thresholding step above)
+    # Since we forced white-on-black in step 2, this is a safety net.
+    if image_tensor.mean() < 0.5:
+         pass # Already correct (mostly black background)
+    else:
+         image_tensor = 1 - image_tensor
 
-    # 4. CRITICAL: Normalization
-    # This aligns the custom image distribution with the MNIST training data
-    # (shifting the range from [0, 1] to approx [-0.42, 2.82])
+    # 6. CRITICAL: Normalization
+    # Matches the training data distribution [-0.42 to 2.82]
     mean_tensor = torch.tensor([0.1307]).view(1, 1, 1, 1)
     std_tensor = torch.tensor([0.3081]).view(1, 1, 1, 1)
-    
     image_tensor = (image_tensor - mean_tensor) / std_tensor
     
-    # 5. Prediction
+    # 7. Prediction
     image_tensor = image_tensor.to(device)
     model.eval()
     
     with torch.no_grad():
         output = model(image_tensor)
     
-    # 6. Interpret Results
+    # 8. Interpret Results
     probabilities = F.softmax(output, dim=1) 
     
     _, predicted_class_tensor = torch.max(output, 1)
@@ -251,8 +293,8 @@ def run_model(model, BATCH_SIZE, EPOCHS, LEARNING_RATE, NUMBER_CLASSES, DOWNLOAD
         #Define loss function
         criterion  = nn.CrossEntropyLoss()
         #Define optimizer
-        optimizer = optim.SGD(model.parameters(), lr=LEARNING_RATE, momentum=0.9)
-       
+        optimizer = optim.SGD(model.parameters(), lr=LEARNING_RATE)
+        #, momentum=0.9
         #Train the model
         loss_data = train_model(model, train_loader, criterion, optimizer, EPOCHS, device)
 
