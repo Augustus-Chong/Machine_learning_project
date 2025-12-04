@@ -128,7 +128,10 @@ def load_model(model, path, device):
     return False
 
 def predict_custom_image(model, image_path, device):
-    """Loads a custom MNIST-like image and applies only necessary scaling and normalization."""
+    """
+    Loads a custom image, applies the EXACT same preprocessing as MNIST training
+    (Resize -> ToTensor -> Inversion Check -> Normalize), and predicts with confidence.
+    """
     if not os.path.exists(image_path):
         print(f"\n--- ERROR: Custom image '{image_path}' not found! ---")
         return
@@ -136,28 +139,43 @@ def predict_custom_image(model, image_path, device):
     print(f"\n--- Predicting Custom Image: {image_path} ---")
     
     try:
-        # Load and convert to grayscale
+        # 1. Load and convert to grayscale
         image = Image.open(image_path).convert('L') 
         
-        # Define the simplified transformation pipeline
+        # 2. Resize and Convert to Tensor (Scales pixels to 0.0 - 1.0)
         simple_transform = transforms.Compose([
-            transforms.Resize((28, 28)), # Safety resize to 28x28
-            transforms.ToTensor(),  # Converts to Tensor and scales 0-1
+            transforms.Resize((28, 28)), 
+            transforms.ToTensor(), 
         ])
         
+        # Add batch dimension: Shape becomes (1, 1, 28, 28)
         image_tensor = simple_transform(image).unsqueeze(0)
         
     except Exception as e:
         print(f"Failed to preprocess or predict custom image: {e}")
         return
+
+    # 3. Inversion Check 
+    # (Ensures digit is white/high-value and background is black/low-value)
+    #if image_tensor.mean() < 0.5:
+    #    image_tensor = 1 - image_tensor 
+
+    # 4. CRITICAL: Normalization
+    # This aligns the custom image distribution with the MNIST training data
+    # (shifting the range from [0, 1] to approx [-0.42, 2.82])
+    mean_tensor = torch.tensor([0.1307]).view(1, 1, 1, 1)
+    std_tensor = torch.tensor([0.3081]).view(1, 1, 1, 1)
     
+    image_tensor = (image_tensor - mean_tensor) / std_tensor
+    
+    # 5. Prediction
     image_tensor = image_tensor.to(device)
-    
     model.eval()
     
     with torch.no_grad():
         output = model(image_tensor)
     
+    # 6. Interpret Results
     probabilities = F.softmax(output, dim=1) 
     
     _, predicted_class_tensor = torch.max(output, 1)
@@ -165,7 +183,7 @@ def predict_custom_image(model, image_path, device):
     
     confidence = probabilities[0][predicted_class].item() * 100
     
-    # Extract probabilities as a flat list and format them
+    # Extract probabilities as a flat list
     all_confidences = probabilities.squeeze().cpu().numpy()
     
     print(f"\nPrediction Result:")
@@ -177,7 +195,6 @@ def predict_custom_image(model, image_path, device):
 
     # Print the confidence for all 10 classes
     for i, conf in enumerate(all_confidences):
-        # Highlight the winning class
         marker = " <--- WINNER" if i == predicted_class else ""
         print(f"  {i}   | {conf * 100:.2f}%{marker}")
     print("-" * 30)
@@ -234,7 +251,7 @@ def run_model(model, BATCH_SIZE, EPOCHS, LEARNING_RATE, NUMBER_CLASSES, DOWNLOAD
         #Define loss function
         criterion  = nn.CrossEntropyLoss()
         #Define optimizer
-        optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
+        optimizer = optim.SGD(model.parameters(), lr=LEARNING_RATE, momentum=0.9)
        
         #Train the model
         loss_data = train_model(model, train_loader, criterion, optimizer, EPOCHS, device)

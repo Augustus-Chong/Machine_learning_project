@@ -5,7 +5,7 @@ from Model_Base import run_model
 
 BATCH_SIZE = 64
 LEARNING_RATE = 0.001
-EPOCHS = 15
+EPOCHS = 40
 DOWNLOAD_ROOT = './mnist_data'
 INPUT_SIZE = 28 * 28
 NUM_CLASSES = 10
