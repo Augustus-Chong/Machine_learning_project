@@ -3,14 +3,14 @@ import torch.nn as nn
 import torch.optim as optim
 from Model_Base import run_model
 
-BATCH_SIZE = 64
+BATCH_SIZE = 128
 LEARNING_RATE = 0.001
-EPOCHS = 15
+EPOCHS = 40
 DOWNLOAD_ROOT = './mnist_data'
 INPUT_SIZE = 28 * 28
 NUM_CLASSES = 10
 CUSTOM_IMAGE_PATH = 'custom_digit.png' 
-MODEL_SAVE_PATH = 'mnist_saves/logistic_model1.pth'
+MODEL_SAVE_PATH = 'logistic_model2'
 
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")

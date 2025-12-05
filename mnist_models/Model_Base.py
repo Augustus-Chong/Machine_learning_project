@@ -73,8 +73,11 @@ def load_model(model, path, device):
         return True
     return False
 
-def evaluate_model(model, test_loader, device, NUM_CLASSES):
-    """Evaluates the model and plots a high-contrast accuracy chart."""
+def evaluate_model(model, test_loader, device, NUM_CLASSES, save_plot_path=None, save_metrics_path=None):
+    """
+    Evaluates the model, plots a high-contrast accuracy chart, and optionally saves 
+    the plot and the text-based metrics report.
+    """
     model.eval() 
     y_true = [] 
     y_pred = [] 
@@ -91,12 +94,31 @@ def evaluate_model(model, test_loader, device, NUM_CLASSES):
     cm = confusion_matrix(y_true, y_pred)
     correct_per_class = cm.diagonal()
     total_per_class = cm.sum(axis=1)
-    class_accuracy = correct_per_class / total_per_class
-    overall_accuracy = np.mean(class_accuracy) # Macro average for coloring logic
+    
+    # Avoid division by zero if a class has no samples
+    class_accuracy = np.divide(correct_per_class, total_per_class, 
+                               out=np.zeros_like(correct_per_class, dtype=float), 
+                               where=total_per_class!=0)
+    
+    overall_accuracy = np.mean(class_accuracy) # Macro average
 
     print(f'\nOverall Accuracy: {100 * overall_accuracy:.4f}%')
     target_names = [str(i) for i in range(NUM_CLASSES)]
-    print(classification_report(y_true, y_pred, target_names=target_names, digits=4))
+    
+    # Generate the report string
+    report_str = classification_report(y_true, y_pred, target_names=target_names, digits=4)
+    print(report_str)
+
+    # --- SAVE METRICS TO TEXT FILE ---
+    if save_metrics_path:
+        try:
+            with open(save_metrics_path, 'w') as f:
+                f.write(f"Overall Accuracy: {100 * overall_accuracy:.4f}%\n\n")
+                f.write("Classification Report:\n")
+                f.write(report_str)
+            print(f"Metrics report saved to: {save_metrics_path}")
+        except Exception as e:
+            print(f"Error saving metrics: {e}")
 
     # --- IMPROVED PLOTTING ---
     plt.figure(figsize=(10, 6))
@@ -119,7 +141,6 @@ def evaluate_model(model, test_loader, device, NUM_CLASSES):
     plt.xticks(range(NUM_CLASSES))
     
     # 2. Zoom in the Y-Axis to show differences
-    # Start 5% below the worst class, capped at 0
     lowest_acc = min(class_accuracy) * 100
     plt.ylim(max(0, lowest_acc - 5), 100.5) 
     
@@ -134,9 +155,20 @@ def evaluate_model(model, test_loader, device, NUM_CLASSES):
                  f'{height:.1f}%', ha='center', va='bottom', fontsize=10, fontweight='bold')
 
     plt.grid(axis='y', linestyle='--', alpha=0.3)
+
+    # --- SAVE PLOT IMAGE ---
+    if save_plot_path:
+        plt.savefig(save_plot_path)
+        print(f"Evaluation plot saved to: {save_plot_path}")
+
     plt.show()
     
     return overall_accuracy
+
+# Example Usage:
+# evaluate_model(model, test_loader, device, NUM_CLASSES, 
+#                save_plot_path='mnist_saves/accuracy_chart.png', 
+#                save_metrics_path='mnist_saves/metrics_report.txt')
 
 def predict_custom_image(model, image_path, device):
     """
@@ -243,9 +275,14 @@ def predict_custom_image(model, image_path, device):
     
     return predicted_class
 
-def plot_loss(loss_data, epochs, window=10):
+import matplotlib.pyplot as plt
+import numpy as np
+import csv
+
+def plot_loss(loss_data, epochs, window=10, save_plot_path=None, save_data_path=None):
     """
     Plots the raw loss and a smoothed version with the X-axis scaled to Epochs.
+    Optionally saves the plot image and the raw data to disk.
     """
     
     # 1. Calculate Moving Average
@@ -254,8 +291,7 @@ def plot_loss(loss_data, epochs, window=10):
     smoothed_loss = np.convolve(padded_loss, np.ones(window)/window, mode='valid')
     
     # 2. Create the Epochs Axis
-    # Generate an array from 0 to total_epochs
-    steps_per_epoch = len(loss_data) / epochs
+    # Generate an array from 0 to total_epochs corresponding to each step
     x_axis = np.linspace(0, epochs, len(loss_data))
     
     zoom_start_idx = int(len(loss_data) * 0.3) 
@@ -276,7 +312,7 @@ def plot_loss(loss_data, epochs, window=10):
     plt.grid(axis="both", linewidth=1, color="lightgrey", linestyle="dashed")
 
     plt.title("Loss over Training Epochs")
-    plt.xlabel("Epoch") # Changed label
+    plt.xlabel("Epoch") 
     plt.ylabel("Loss")
     
     # Set X-ticks to show integers for every epoch
@@ -284,14 +320,41 @@ def plot_loss(loss_data, epochs, window=10):
     plt.xlim(0, epochs)
     
     plt.legend()
+    
+    # --- NEW: Save the Plot Image ---
+    if save_plot_path:
+        plt.savefig(save_plot_path)
+        print(f"Plot image saved to: {save_plot_path}")
+
     plt.show()
+
+    # --- NEW: Save the Data to CSV ---
+    if save_data_path:
+        # Combine the arrays into rows: [Epoch, Raw Loss, Smoothed Loss]
+        rows = zip(x_axis, loss_data, smoothed_loss)
+        
+        try:
+            with open(save_data_path, 'w', newline='') as f:
+                writer = csv.writer(f)
+                # Write Header
+                writer.writerow(['Epoch', 'Raw_Loss', 'Smoothed_Loss'])
+                # Write Data
+                writer.writerows(rows)
+            print(f"Loss data saved to: {save_data_path}")
+        except Exception as e:
+            print(f"Error saving data: {e}")
+
+# Example Usage:
+# plot_loss(train_loss, EPOCHS, window=20, 
+#           save_plot_path='training_graph.png', 
+#           save_data_path='training_data.csv')
 
 def run_model(model, BATCH_SIZE, EPOCHS, LEARNING_RATE, NUMBER_CLASSES, DOWNLOAD_ROOT, MODEL_SAVE_PATH, device, CUSTOM_IMAGE_PATH):
     #Get dataloaders
     train_loader, test_loader = get_data_loaders(DOWNLOAD_ROOT, BATCH_SIZE)
     
     #load saved weights
-    is_loaded = load_model(model, MODEL_SAVE_PATH, device)
+    is_loaded = load_model(model, 'mnist_saves/mnist_metric_plots/' + MODEL_SAVE_PATH + '.pth', device)
 
     if not is_loaded:
         #Define loss function
@@ -302,12 +365,16 @@ def run_model(model, BATCH_SIZE, EPOCHS, LEARNING_RATE, NUMBER_CLASSES, DOWNLOAD
         #Train the model
         loss_data = train_model(model, train_loader, criterion, optimizer, EPOCHS, device)
 
-        save_model(model, MODEL_SAVE_PATH)
+        save_model(model, 'mnist_saves/mnist_models/' + MODEL_SAVE_PATH + '.pth')
         #Evaluate model
-        evaluate_model(model, test_loader, device, NUMBER_CLASSES)
+        evaluate_model(model, test_loader, device, NUMBER_CLASSES, 
+                       save_plot_path= 'mnist_saves/mnist_metric_plots/' + MODEL_SAVE_PATH + '.png', 
+                       save_metrics_path= 'mnist_saves/mnist_metrics' + MODEL_SAVE_PATH + '.csv')
 
         #visualing loss
-        plot_loss(loss_data, EPOCHS, window=20)
+        plot_loss(loss_data, EPOCHS, window=20, 
+                  save_plot_path= 'mnist_saves/mnist_loss_plots/' + MODEL_SAVE_PATH + 'png', 
+                  save_data_path= 'mnist_saves/mnist_loss/' + MODEL_SAVE_PATH + '.csv')
     else:
         print("\nSkipping training as weights were loaded.")
         evaluate_model(model, test_loader, device, NUMBER_CLASSES)
