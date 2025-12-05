@@ -10,6 +10,8 @@ import torch.nn.functional as F
 import numpy as np
 from sklearn.metrics import classification_report, confusion_matrix
 import time
+import csv
+from pathlib import Path
 
 def get_data_loaders(root, batch_size):
     transform = transforms.Compose([
@@ -63,8 +65,6 @@ def save_model(model, path):
     torch.save(model.state_dict(), path)
     print(f"\nModel weights saved to {path}")
 
-
-
 def load_model(model, path, device):
     if os.path.exists(path):
         model.load_state_dict(torch.load(path, map_location=device))
@@ -112,6 +112,8 @@ def evaluate_model(model, test_loader, device, NUM_CLASSES, save_plot_path=None,
     # --- SAVE METRICS TO TEXT FILE ---
     if save_metrics_path:
         try:
+            save_dir = Path(save_metrics_path).parent
+            os.makedirs(save_dir, exist_ok=True)
             with open(save_metrics_path, 'w') as f:
                 f.write(f"Overall Accuracy: {100 * overall_accuracy:.4f}%\n\n")
                 f.write("Classification Report:\n")
@@ -158,17 +160,14 @@ def evaluate_model(model, test_loader, device, NUM_CLASSES, save_plot_path=None,
 
     # --- SAVE PLOT IMAGE ---
     if save_plot_path:
+        save_dir = Path(save_plot_path).parent
+        os.makedirs(save_dir, exist_ok=True)
         plt.savefig(save_plot_path)
         print(f"Evaluation plot saved to: {save_plot_path}")
 
     plt.show()
     
     return overall_accuracy
-
-# Example Usage:
-# evaluate_model(model, test_loader, device, NUM_CLASSES, 
-#                save_plot_path='mnist_saves/accuracy_chart.png', 
-#                save_metrics_path='mnist_saves/metrics_report.txt')
 
 def predict_custom_image(model, image_path, device):
     """
@@ -275,10 +274,6 @@ def predict_custom_image(model, image_path, device):
     
     return predicted_class
 
-import matplotlib.pyplot as plt
-import numpy as np
-import csv
-
 def plot_loss(loss_data, epochs, window=10, save_plot_path=None, save_data_path=None):
     """
     Plots the raw loss and a smoothed version with the X-axis scaled to Epochs.
@@ -323,6 +318,8 @@ def plot_loss(loss_data, epochs, window=10, save_plot_path=None, save_data_path=
     
     # --- NEW: Save the Plot Image ---
     if save_plot_path:
+        save_dir = Path(save_plot_path).parent
+        os.makedirs(save_dir, exist_ok=True)
         plt.savefig(save_plot_path)
         print(f"Plot image saved to: {save_plot_path}")
 
@@ -330,6 +327,8 @@ def plot_loss(loss_data, epochs, window=10, save_plot_path=None, save_data_path=
 
     # --- NEW: Save the Data to CSV ---
     if save_data_path:
+        save_dir = Path(save_data_path).parent
+        os.makedirs(save_dir, exist_ok=True)
         # Combine the arrays into rows: [Epoch, Raw Loss, Smoothed Loss]
         rows = zip(x_axis, loss_data, smoothed_loss)
         
@@ -344,17 +343,12 @@ def plot_loss(loss_data, epochs, window=10, save_plot_path=None, save_data_path=
         except Exception as e:
             print(f"Error saving data: {e}")
 
-# Example Usage:
-# plot_loss(train_loss, EPOCHS, window=20, 
-#           save_plot_path='training_graph.png', 
-#           save_data_path='training_data.csv')
-
 def run_model(model, BATCH_SIZE, EPOCHS, LEARNING_RATE, NUMBER_CLASSES, DOWNLOAD_ROOT, MODEL_SAVE_PATH, device, CUSTOM_IMAGE_PATH):
     #Get dataloaders
     train_loader, test_loader = get_data_loaders(DOWNLOAD_ROOT, BATCH_SIZE)
     
     #load saved weights
-    is_loaded = load_model(model, 'mnist_saves/mnist_metric_plots/' + MODEL_SAVE_PATH + '.pth', device)
+    is_loaded = load_model(model, 'mnist_saves/mnist_models/' + MODEL_SAVE_PATH + '.pth', device)
 
     if not is_loaded:
         #Define loss function
@@ -368,8 +362,8 @@ def run_model(model, BATCH_SIZE, EPOCHS, LEARNING_RATE, NUMBER_CLASSES, DOWNLOAD
         save_model(model, 'mnist_saves/mnist_models/' + MODEL_SAVE_PATH + '.pth')
         #Evaluate model
         evaluate_model(model, test_loader, device, NUMBER_CLASSES, 
-                       save_plot_path= 'mnist_saves/mnist_metric_plots/' + MODEL_SAVE_PATH + '.png', 
-                       save_metrics_path= 'mnist_saves/mnist_metrics' + MODEL_SAVE_PATH + '.csv')
+                       save_plot_path= 'mnist_saves/mnist_metrics_plots/' + MODEL_SAVE_PATH + '.png', 
+                       save_metrics_path= 'mnist_saves/mnist_metrics/' + MODEL_SAVE_PATH + '.csv')
 
         #visualing loss
         plot_loss(loss_data, EPOCHS, window=20, 
