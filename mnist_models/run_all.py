@@ -15,8 +15,8 @@ from Model_Base import load_model2, predict
 
 # --- CONFIGURATION ---
 CUSTOM_IMAGE_PATH = 'custom_digit.png' 
-MODEL_PATH_RESNET = 'mnist_saves/resnet_model.pth' 
-MODEL_PATH_MLP = 'mnist_saves/mlp_model.pth' 
+MODEL_PATH_RESNET = 'mnist_saves/resnet_model1.pth' 
+MODEL_PATH_MLP = 'mnist_saves/mlp_model1.pth' 
 MODEL_PATH_LOGISTIC = 'mnist_saves/logistic_model1.pth' 
 
 # Architectural parameters (must match training)

@@ -243,43 +243,47 @@ def predict_custom_image(model, image_path, device):
     
     return predicted_class
 
-def plot_loss(loss_data, window=10):
+def plot_loss(loss_data, epochs, window=10):
     """
-    Plots the raw loss and a smoothed version for clearer convergence analysis.
-    The plot also focuses on the later training steps.
+    Plots the raw loss and a smoothed version with the X-axis scaled to Epochs.
     """
     
-    # 1. Calculate Moving Average for Smoothing
+    # 1. Calculate Moving Average
     loss_np = np.array(loss_data)
-    # Pads the start with the first value so the smoothed curve starts at index 0
     padded_loss = np.pad(loss_np, (window-1, 0), mode='edge')
     smoothed_loss = np.convolve(padded_loss, np.ones(window)/window, mode='valid')
     
-    # 2. Define Zoom Range
-    # Start plotting at 30% of the total training steps to skip the steep initial drop
-    zoom_start_index = int(len(loss_data) * 0.3) 
+    # 2. Create the Epochs Axis
+    # Generate an array from 0 to total_epochs
+    steps_per_epoch = len(loss_data) / epochs
+    x_axis = np.linspace(0, epochs, len(loss_data))
     
+    zoom_start_idx = int(len(loss_data) * 0.3) 
     
     plt.figure(figsize=(12, 6))
 
-    # Plot 1: Smoothed Loss (Main Trend)
-    plt.plot(smoothed_loss, label=f'Smoothed Loss (Window={window})', color='darkorange', linewidth=2)
+    # Plot 1: Smoothed Loss
+    plt.plot(x_axis, smoothed_loss, label=f'Smoothed Loss (Window={window})', color='darkorange', linewidth=2)
     
-    # Plot 2: Raw Loss (Volatility check)
-    plt.plot(loss_data, label='Raw Loss (Volatility)', color='skyblue', alpha=0.3)
+    # Plot 2: Raw Loss
+    plt.plot(x_axis, loss_data, label='Raw Loss (Volatility)', color='skyblue', alpha=0.3)
     
-    # Optional: Plot 3: Zoomed in section (for extra clarity)
-    plt.plot(np.arange(zoom_start_index, len(loss_data)), 
-             smoothed_loss[zoom_start_index:], 
+    # Optional: Plot 3: Zoomed Trend
+    plt.plot(x_axis[zoom_start_idx:], 
+             smoothed_loss[zoom_start_idx:], 
              label='Zoomed Trend', color='red', linestyle='--')
     
     plt.grid(axis="both", linewidth=1, color="lightgrey", linestyle="dashed")
 
-    plt.title("Loss over Training Steps: Trend vs. Volatility")
-    plt.xlabel(f"Training Step (x100 batches) [Total Steps: {len(loss_data)}]")
+    plt.title("Loss over Training Epochs")
+    plt.xlabel("Epoch") # Changed label
     plt.ylabel("Loss")
+    
+    # Set X-ticks to show integers for every epoch
+    plt.xticks(np.arange(0, epochs + 1, step=max(1, epochs//10)))
+    plt.xlim(0, epochs)
+    
     plt.legend()
-    plt.grid(True, alpha=0.6)
     plt.show()
 
 def run_model(model, BATCH_SIZE, EPOCHS, LEARNING_RATE, NUMBER_CLASSES, DOWNLOAD_ROOT, MODEL_SAVE_PATH, device, CUSTOM_IMAGE_PATH):
@@ -293,8 +297,8 @@ def run_model(model, BATCH_SIZE, EPOCHS, LEARNING_RATE, NUMBER_CLASSES, DOWNLOAD
         #Define loss function
         criterion  = nn.CrossEntropyLoss()
         #Define optimizer
-        optimizer = optim.SGD(model.parameters(), lr=LEARNING_RATE)
-        #, momentum=0.9
+        optimizer = optim.SGD(model.parameters(), lr=LEARNING_RATE, momentum=0.9)
+        #
         #Train the model
         loss_data = train_model(model, train_loader, criterion, optimizer, EPOCHS, device)
 
@@ -303,7 +307,7 @@ def run_model(model, BATCH_SIZE, EPOCHS, LEARNING_RATE, NUMBER_CLASSES, DOWNLOAD
         evaluate_model(model, test_loader, device, NUMBER_CLASSES)
 
         #visualing loss
-        plot_loss(loss_data, window=20)
+        plot_loss(loss_data, EPOCHS, window=20)
     else:
         print("\nSkipping training as weights were loaded.")
         evaluate_model(model, test_loader, device, NUMBER_CLASSES)
