@@ -4,14 +4,14 @@ from Model_Base import run_model
 import torch.nn.functional as F
 
 
-BATCH_SIZE = 64
+BATCH_SIZE = 128
 LEARNING_RATE = 0.001
-EPOCHS = 15
+EPOCHS = 30
 DOWNLOAD_ROOT = './mnist_data'
 INPUT_SIZE = 28 * 28
 NUM_CLASSES = 10
 CUSTOM_IMAGE_PATH = 'custom_digit.png' 
-MODEL_SAVE_PATH = 'resnet_model3_momentum'
+MODEL_SAVE_PATH = 'resnet_model2_momentum'
 HIDDEN_SIZE = 128
 NUM_RESIDUAL_BLOCKS = 3
 

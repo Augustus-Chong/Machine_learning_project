@@ -23,9 +23,9 @@ DATA_ROOT = './mnist_data'
 
 # 1. Paths to your TRAINED MODELS (for evaluation)
 PATHS = {
-    'ResNet': 'mnist_saves/resnet_model1.pth',
-    'MLP': 'mnist_saves/mlp_model1.pth',
-    'Logistic': 'mnist_saves/logistic_model1.pth',
+    'ResNet': 'mnist_saves/mnist_models/resnet_model2_momentum.pth',
+    'MLP': 'mnist_saves/mnist_models/mlp_model2_momentum.pth',
+    'Logistic': 'mnist_saves/mnist_models/logistic_model2_momentum.pth',
     'KNN': 'knn_scaler_model.joblib',
     'SVM': 'svm_scaler_model.joblib'
 }
@@ -33,9 +33,9 @@ PATHS = {
 # 2. Paths to your TRAINING LOGS (for loss plotting)
 # Make sure these match the 'save_data_path' you used during training
 LOSS_PATHS = {
-    'ResNet': 'mnist_saves/resnet_training_data.csv',
-    'MLP': 'mnist_saves/mlp_training_data.csv',
-    'Logistic': 'mnist_saves/logistic_training_data.csv'
+    'ResNet': 'mnist_saves/mnist_loss/resnet_model2_momentum.csv',
+    'MLP': 'mnist_saves/mnist_loss/mlp_model2_momentum.csv',
+    'Logistic': 'mnist_saves/mnist_loss/logistic_model2_momentum.csv'
 }
 
 # --- 1. DATA LOADING ---
@@ -109,10 +109,11 @@ results = []
 
 # --- A. Evaluate PyTorch Models ---
 torch_configs = [
-    ('ResNet', MinimalResNet(INPUT_SIZE, HIDDEN_SIZE, NUM_CLASSES, NUM_BLOCKS)),
+    ('ResNet', ConvResNet(NUM_CLASSES)),
     ('MLP', MLP(INPUT_SIZE, HIDDEN_SIZE, NUM_CLASSES)),
     ('Logistic', LogisticRegression(INPUT_SIZE, NUM_CLASSES))
 ]
+#('ResNet', MinimalResNet(INPUT_SIZE, HIDDEN_SIZE, NUM_CLASSES, NUM_BLOCKS))
 
 sample_tensor = torch.randn(1, 1, 28, 28).to(DEVICE)
 
