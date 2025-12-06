@@ -354,8 +354,11 @@ def run_model(model, BATCH_SIZE, EPOCHS, LEARNING_RATE, NUMBER_CLASSES, DOWNLOAD
         #Define loss function
         criterion  = nn.CrossEntropyLoss()
         #Define optimizer
-        optimizer = optim.SGD(model.parameters(), lr=LEARNING_RATE, momentum=0.9)
-        #
+        # Change this line:
+        #optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE, betas=(0.9, 0.999)) 
+        #optimizer = optim.RMSprop(model.parameters(), lr=LEARNING_RATE, alpha=0.99, momentum=0.9)
+        optimizer = optim.SGD(model.parameters(), lr=LEARNING_RATE)
+
         #Train the model
         loss_data = train_model(model, train_loader, criterion, optimizer, EPOCHS, device)
 
@@ -367,7 +370,7 @@ def run_model(model, BATCH_SIZE, EPOCHS, LEARNING_RATE, NUMBER_CLASSES, DOWNLOAD
 
         #visualing loss
         plot_loss(loss_data, EPOCHS, window=20, 
-                  save_plot_path= 'mnist_saves/mnist_loss_plots/' + MODEL_SAVE_PATH + 'png', 
+                  save_plot_path= 'mnist_saves/mnist_loss_plots/' + MODEL_SAVE_PATH + '.png', 
                   save_data_path= 'mnist_saves/mnist_loss/' + MODEL_SAVE_PATH + '.csv')
     else:
         print("\nSkipping training as weights were loaded.")

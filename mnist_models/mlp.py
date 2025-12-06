@@ -11,7 +11,7 @@ DOWNLOAD_ROOT = './mnist_data'
 INPUT_SIZE = 28 * 28
 NUM_CLASSES = 10
 CUSTOM_IMAGE_PATH = 'custom_digit.png' 
-MODEL_SAVE_PATH = 'mlp_model2_momentum'
+MODEL_SAVE_PATH = 'mlp_model2_SGD'
 HIDDEN_SIZE = 128
 
 
