@@ -12,6 +12,7 @@ from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_sc
 from resnet import MinimalResNet, ConvResNet
 from mlp import MLP
 from logistic import LogisticRegression
+import gc
 
 # --- CONFIGURATION ---
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -19,24 +20,30 @@ INPUT_SIZE = 784
 HIDDEN_SIZE = 128
 NUM_CLASSES = 10
 NUM_BLOCKS = 3
+BATCH_SIZE_FOR_TIMING = 64
 DATA_ROOT = './mnist_data'
 
 # 1. Paths to your TRAINED MODELS (for evaluation)
 PATHS = {
-    'ResNet': 'mnist_saves/mnist_models/resnet_model2_RMSPROP.pth',
-    'MLP': 'mnist_saves/mnist_models/mlp_model2_RMSPROP.pth',
-    'Logistic': 'mnist_saves/mnist_models/logistic_model2_RMSPROP.pth',
-    'KNN': 'knn_scaler_model.joblib',
-    'SVM': 'svm_scaler_model.joblib'
+    'ResNet': 'mnist_saves/mnist_models/resnet_model2_SGD.pth',
+    'MLP': 'mnist_saves/mnist_models/mlp_model2_SGD.pth',
+    'Logistic' : 'mnist_saves/mnist_models/logistic_model2_SGD.pth'
 }
+#'ResNet': 'mnist_saves/mnist_models/resnet_model2_RMSPROP.pth',
+#'MLP': 'mnist_saves/mnist_models/mlp_model2_RMSPROP.pth',
+#
+#'KNN': 'knn_scaler_model.joblib',
+#'SVM': 'svm_scaler_model.joblib'
 
 # 2. Paths to your TRAINING LOGS (for loss plotting)
 # Make sure these match the 'save_data_path' you used during training
 LOSS_PATHS = {
-    'ResNet': 'mnist_saves/mnist_loss/resnet_model2_RMSPROP.csv',
-    'MLP': 'mnist_saves/mnist_loss/mlp_model2_RMSPROP.csv',
-    'Logistic': 'mnist_saves/mnist_loss/logistic_model2_RMSPROP.csv'
+    'ResNet': 'mnist_saves/mnist_loss/resnet_model2_SGD.csv',
+    'MLP': 'mnist_saves/mnist_loss/mlp_model2_SGD.csv',
+    'Logistic' : 'mnist_saves/mnist_loss/logistic_model2_SGD.csv'
 }
+#'ResNet': 'mnist_saves/mnist_loss/resnet_model2_RMSPROP.csv',
+#'MLP': 'mnist_saves/mnist_loss/mlp_model2_RMSPROP.csv',
 
 # --- 1. DATA LOADING ---
 print("Loading Test Data...")
@@ -56,17 +63,87 @@ def get_file_size(path):
         return os.path.getsize(path) / (1024 * 1024)
     return 0.0
 
-def measure_inference_time_pytorch(model, input_tensor, runs=100):
-    """Measures average time to predict ONE batch of 1 image."""
+def measure_inference_time_pytorch(model, input_tensor, runs=1000):
+    """
+    Measures latency by timing a CONTINUOUS LOOP of runs.
+    This obliterates the variance caused by OS noise on fast operations.
+    """
     model.eval()
-    times = []
+    
+    # 1. Prepare a single input (Batch size 1 for real-world latency)
+    # Ensure it's 4D [1, 1, 28, 28] or 2D [1, 784] depending on model
+    if input_tensor.dim() == 4:
+        single_input = input_tensor[0].unsqueeze(0)
+    else:
+        single_input = input_tensor[0].unsqueeze(0)
+        
+    is_cuda = single_input.is_cuda
+    
+    # 2. Warmup (Get hardware ready)
     with torch.no_grad():
-        for _ in range(10): _ = model(input_tensor) # Warmup
+        for _ in range(50):
+            _ = model(single_input)
+            if is_cuda: torch.cuda.synchronize()
+
+    # 3. The "Loop Timing" Strategy
+    # We measure the total time of 'runs' iterations together
+    gc_old = gc.isenabled()
+    gc.disable() # Pause garbage collector
+    
+    try:
+        with torch.no_grad():
+            if is_cuda: torch.cuda.synchronize()
+            
+            start = time.perf_counter()
+            
+            for _ in range(runs):
+                _ = model(single_input)
+                # Note: We do NOT sync inside the loop. 
+                # We want to saturate the pipeline for max throughput stability.
+            
+            if is_cuda: torch.cuda.synchronize()
+            
+            end = time.perf_counter()
+            
+    finally:
+        if gc_old: gc.enable() # Re-enable GC
+
+    total_time_ms = (end - start) * 1000
+    avg_time_per_img = total_time_ms / runs
+    
+    return avg_time_per_img
+
+def measure_inference_time_sklearn(model, scaler, input_np, runs=1000):
+    """
+    Same 'Time the Loop' strategy for Scikit-Learn.
+    """
+    # Prepare single input
+    single_input = input_np[0].reshape(1, -1)
+    input_scaled = scaler.transform(single_input)
+    
+    # Warmup
+    for _ in range(10):
+        _ = model.predict(input_scaled)
+
+    # Measure Loop
+    gc_old = gc.isenabled()
+    gc.disable()
+    
+    try:
+        start = time.perf_counter()
+        
         for _ in range(runs):
-            start = time.time()
-            _ = model(input_tensor)
-            times.append(time.time() - start)
-    return (sum(times) / len(times)) * 1000 # ms
+            _ = model.predict(input_scaled)
+            
+        end = time.perf_counter()
+        
+    finally:
+        if gc_old: gc.enable()
+
+    total_time_ms = (end - start) * 1000
+    avg_time_per_img = total_time_ms / runs
+    
+    return avg_time_per_img
 
 def measure_inference_time_sklearn(model, scaler, input_np, runs=100):
     """Measures average time to predict ONE sample."""
@@ -109,16 +186,15 @@ results = []
 
 # --- A. Evaluate PyTorch Models ---
 torch_configs = [
-    ('SGD', LogisticRegression(INPUT_SIZE, NUM_CLASSES)),
-    ('SGD+MOMENTUM', LogisticRegression(INPUT_SIZE, NUM_CLASSES)),
-    ('RMSPROP', LogisticRegression(INPUT_SIZE, NUM_CLASSES)),
-    ('ADAM', LogisticRegression(INPUT_SIZE, NUM_CLASSES))
+    ('ResNet', ConvResNet(NUM_CLASSES)),
+    ('MLP', MLP(INPUT_SIZE, HIDDEN_SIZE, NUM_CLASSES)),
+    ('Logistic', LogisticRegression(INPUT_SIZE, NUM_CLASSES))
 ]
 #('ResNet', MinimalResNet(INPUT_SIZE, HIDDEN_SIZE, NUM_CLASSES, NUM_BLOCKS))
 #('MLP', MLP(INPUT_SIZE, HIDDEN_SIZE, NUM_CLASSES)),
 #('ResNet', ConvResNet(NUM_CLASSES)),
 
-sample_tensor = torch.randn(1, 1, 28, 28).to(DEVICE)
+sample_tensor = torch.randn(BATCH_SIZE_FOR_TIMING, 1, 28, 28).to(DEVICE)
 
 for name, model_arch in torch_configs:
     path = PATHS.get(name)
@@ -141,6 +217,7 @@ for name, model_arch in torch_configs:
     })
 
 # --- B. Evaluate Classical Models ---
+'''
 sklearn_configs = ['KNN', 'SVM']
 sample_np = np.random.rand(1, 784).astype(np.float32)
 
@@ -167,7 +244,7 @@ for name in sklearn_configs:
         })
     except Exception as e:
         print(f"Error evaluating {name}: {e}")
-
+'''
 # --- 4. VISUALIZATION AND REPORT ---
 
 if not results:
