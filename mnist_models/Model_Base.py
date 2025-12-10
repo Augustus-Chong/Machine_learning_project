@@ -42,20 +42,28 @@ def get_data_loaders(root, batch_size):
 
 def train_model(model, train_loader, criterion, optimizer, epochs, device):
     start_time = time.time()
-    model.train()
+    model.train() 
     loss_history = []
+    
+    print(f"Training started with {len(train_loader)} batches per epoch.")
+
     for epoch in range(epochs):
         for batch_idx, (images, labels) in enumerate(train_loader):
             images, labels = images.to(device), labels.to(device)
-            optimizer.zero_grad() #flush out previous gradients + initialization grads
-            outputs = model(images) #Forward Pass
-            loss = criterion(outputs, labels) #compute loss
-            loss.backward() #Backward pass, computes gradients
-            optimizer.step() #update weights using the optimizer chosen
+            
+            optimizer.zero_grad() 
+            outputs = model(images) 
+            loss = criterion(outputs, labels) 
+            loss.backward() 
+            optimizer.step() 
 
-            if (batch_idx + 1) % 100 == 0:
+            # FIX 1: Always record the loss for the plot, regardless of step count
+            loss_history.append(loss.item())
+
+            # FIX 2: Print every 100 steps OR if it's the very last batch
+            if (batch_idx + 1) % 100 == 0 or (batch_idx + 1) == len(train_loader):
                 print(f'Epoch [{epoch+1}/{epochs}], Step [{batch_idx+1}/{len(train_loader)}], Loss: {loss.item():.4f}')
-                loss_history.append(loss.item())
+                
     end_time = time.time()
     training_duration = end_time - start_time
     print(f"\nTraining Complete in {training_duration:.2f} seconds.")

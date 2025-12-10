@@ -25,9 +25,14 @@ DATA_ROOT = './mnist_data'
 
 # 1. Paths to your TRAINED MODELS (for evaluation)
 PATHS = {
-    'ResNet': 'mnist_saves/mnist_models/resnet_model2_SGD.pth',
-    'MLP': 'mnist_saves/mnist_models/mlp_model2_SGD.pth',
-    'Logistic' : 'mnist_saves/mnist_models/logistic_model2_SGD.pth'
+    '1': 'mnist_saves/mnist_models/logistic_model2_Batch1.pth',
+    '4': 'mnist_saves/mnist_models/logistic_model2_Batch4.pth',
+    '8': 'mnist_saves/mnist_models/logistic_model2_Batch8.pth',
+    '16': 'mnist_saves/mnist_models/logistic_model2_Batch16.pth',
+    '32': 'mnist_saves/mnist_models/logistic_model2_Batch32.pth',
+    '64': 'mnist_saves/mnist_models/logistic_model2_Batch64.pth',
+    '256': 'mnist_saves/mnist_models/logistic_model2_Batch256.pth',
+    
 }
 #'ResNet': 'mnist_saves/mnist_models/resnet_model2_RMSPROP.pth',
 #'MLP': 'mnist_saves/mnist_models/mlp_model2_RMSPROP.pth',
@@ -35,12 +40,20 @@ PATHS = {
 #'KNN': 'knn_scaler_model.joblib',
 #'SVM': 'svm_scaler_model.joblib'
 
+#'ResNet': 'mnist_saves/mnist_models/resnet_model2_SGD.pth',
+#    'MLP': 'mnist_saves/mnist_models/mlp_model2_SGD.pth',
+#    'Logistic' : 'mnist_saves/mnist_models/logistic_model2_SGD.pth'
+
 # 2. Paths to your TRAINING LOGS (for loss plotting)
 # Make sure these match the 'save_data_path' you used during training
 LOSS_PATHS = {
-    'ResNet': 'mnist_saves/mnist_loss/resnet_model2_SGD.csv',
-    'MLP': 'mnist_saves/mnist_loss/mlp_model2_SGD.csv',
-    'Logistic' : 'mnist_saves/mnist_loss/logistic_model2_SGD.csv'
+    '1': 'mnist_saves/mnist_loss/logistic_model2_Batch1.csv',
+    '4': 'mnist_saves/mnist_loss/logistic_model2_Batch4.csv',
+    '8': 'mnist_saves/mnist_loss/logistic_model2_Batch8.csv',
+    '16': 'mnist_saves/mnist_loss/logistic_model2_Batch16.csv',
+    '32': 'mnist_saves/mnist_loss/logistic_model2_Batch32.csv',
+    '64': 'mnist_saves/mnist_loss/logistic_model2_Batch64.csv',
+    '256': 'mnist_saves/mnist_loss/logistic_model2_Batch256.csv',
 }
 #'ResNet': 'mnist_saves/mnist_loss/resnet_model2_RMSPROP.csv',
 #'MLP': 'mnist_saves/mnist_loss/mlp_model2_RMSPROP.csv',
@@ -186,13 +199,19 @@ results = []
 
 # --- A. Evaluate PyTorch Models ---
 torch_configs = [
-    ('ResNet', ConvResNet(NUM_CLASSES)),
-    ('MLP', MLP(INPUT_SIZE, HIDDEN_SIZE, NUM_CLASSES)),
-    ('Logistic', LogisticRegression(INPUT_SIZE, NUM_CLASSES))
+    ('1', LogisticRegression(INPUT_SIZE, NUM_CLASSES)),
+    ('4', LogisticRegression(INPUT_SIZE, NUM_CLASSES)),
+    ('8', LogisticRegression(INPUT_SIZE, NUM_CLASSES)),
+    ('16', LogisticRegression(INPUT_SIZE, NUM_CLASSES)),
+    ('32', LogisticRegression(INPUT_SIZE, NUM_CLASSES)),
+    ('64', LogisticRegression(INPUT_SIZE, NUM_CLASSES)),
+    ('256', LogisticRegression(INPUT_SIZE, NUM_CLASSES)),
+    
 ]
 #('ResNet', MinimalResNet(INPUT_SIZE, HIDDEN_SIZE, NUM_CLASSES, NUM_BLOCKS))
 #('MLP', MLP(INPUT_SIZE, HIDDEN_SIZE, NUM_CLASSES)),
 #('ResNet', ConvResNet(NUM_CLASSES)),
+#('Logistic', LogisticRegression(INPUT_SIZE, NUM_CLASSES))
 
 sample_tensor = torch.randn(BATCH_SIZE_FOR_TIMING, 1, 28, 28).to(DEVICE)
 
@@ -245,7 +264,7 @@ for name in sklearn_configs:
     except Exception as e:
         print(f"Error evaluating {name}: {e}")
 '''
-# --- 4. VISUALIZATION AND REPORT ---
+# --- 4. VISUALIZATION AND REPORT (IMPROVED SCALING) ---
 
 if not results:
     print("No models evaluated. Check file paths.")
@@ -258,66 +277,90 @@ else:
     print("="*60)
     df_display = df.copy()
     df_display['Accuracy'] = df_display['Accuracy'] * 100
-    print(df_display.set_index('Model').to_string())
+    print(df_display.set_index('Model').sort_values(by='Accuracy', ascending=False).to_string())
 
     # ==========================================
-    # PLOT 1: LOSS COMPARISON (NEW ADDITION)
+    # PLOT 1: LOSS COMPARISON (LOG SCALE FIX)
     # ==========================================
     plt.figure(figsize=(12, 7))
     found_any_csv = False
     
-    for model_name, file_path in LOSS_PATHS.items():
+    # We define a list of linestyles to help distinguish lines if colors are similar
+    linestyles = ['-', '--', '-.', ':']
+    
+    for idx, (model_name, file_path) in enumerate(LOSS_PATHS.items()):
         if os.path.exists(file_path):
             found_any_csv = True
             try:
                 loss_df = pd.read_csv(file_path)
-                # Plot Smoothed Loss
-                plt.plot(loss_df['Epoch'], loss_df['Smoothed_Loss'], linewidth=2, label=f"{model_name} Loss")
-                # Add dot at the end
-                plt.scatter(loss_df['Epoch'].iloc[-1], loss_df['Smoothed_Loss'].iloc[-1], s=50)
+                
+                # Assign a unique style to each line
+                style = linestyles[idx % len(linestyles)] #naw
+                
+                plt.plot(loss_df['Epoch'], loss_df['Smoothed_Loss'], 
+                         linewidth=2, linestyle='-', label=f"{model_name}")
+                
+                # Mark the final point
+                plt.scatter(loss_df['Epoch'].iloc[-1], loss_df['Smoothed_Loss'].iloc[-1], s=30)
+                
             except Exception as e:
                 print(f"Error reading CSV for {model_name}: {e}")
-        else:
-            print(f"Note: Training log not found for {model_name} at {file_path}")
             
     if found_any_csv:
-        plt.title("Training Dynamics: Loss over Epochs", fontsize=14)
+        plt.title("Training Dynamics: Loss over Epochs (Log Scale)", fontsize=14)
         plt.xlabel("Epochs", fontsize=12)
-        plt.ylabel("Loss (Smoothed)", fontsize=12)
-        plt.grid(True, linestyle='--', alpha=0.5)
-        plt.legend()
+        plt.ylabel("Loss (Log Scale)", fontsize=12)
+        
+        # CRITICAL FIX: Use Log Scale to see small differences clearly
+        plt.yscale('log') 
+        
+        # Grid adjustments for log scale
+        plt.grid(True, which="both", ls="-", alpha=0.2)
+        plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left') # Move legend outside if crowded
         plt.tight_layout()
         plt.show()
     else:
         print("No CSV training logs found. Skipping Loss Plot.")
 
     # ==========================================
-    # PLOT 2: METRICS DASHBOARD (2x2 Grid)
+    # PLOT 2: METRICS DASHBOARD (SMART ZOOM)
     # ==========================================
     fig, axes = plt.subplots(2, 2, figsize=(14, 10))
-    fig.suptitle('Model Performance Metrics Comparison', fontsize=16)
+    fig.suptitle('Metrics Comparison (Red < Mean <= Green)', fontsize=16)
     axes = axes.flatten()
     
     metrics_config = [
-        ('Accuracy', 'Accuracy Score', 'tab:blue'),
-        ('Precision', 'Precision (Macro)', 'tab:green'),
-        ('Recall', 'Recall (Macro)', 'tab:orange'),
-        ('F1-Score', 'F1-Score (Macro)', 'tab:red')
+        ('Accuracy', 'Accuracy'),
+        ('Precision', 'Precision'),
+        ('Recall', 'Recall'),
+        ('F1-Score', 'F1-Score')
     ]
     
-    bar_colors = ['skyblue' if t == 'Deep Learning' else 'navajowhite' for t in df['Type']]
-
-    for i, (col, title, _) in enumerate(metrics_config):
+    for i, (col, title) in enumerate(metrics_config):
         ax = axes[i]
-        bars = ax.bar(df['Model'], df[col], color=bar_colors, edgecolor='black', alpha=0.8)
         
+        # Calculate Mean
+        mean_val = df[col].mean()
+        
+        # Color Logic: Green if >= Mean, Red if < Mean
+        colors = ['green' if val >= mean_val else 'red' for val in df[col]]
+        
+        bars = ax.bar(df['Model'], df[col], color=colors, edgecolor='black', alpha=0.8)
         ax.set_title(title, fontsize=12, fontweight='bold')
-        ax.set_ylim(0.8, 1.0) # Zoom for MNIST
+        
+        # Plot Mean Line
+        ax.axhline(mean_val, color='black', linestyle='--', linewidth=1, label=f'Mean: {mean_val:.4f}')
+        ax.legend(loc='lower right')
+        
+        # --- REMOVED AGGRESSIVE ZOOM ---
+        # Setting standard limits for probability-based metrics (0 to 1)
+        ax.set_ylim(0, 1.1) 
         ax.grid(axis='y', linestyle='--', alpha=0.4)
         
+        # Labels
         for bar in bars:
             height = bar.get_height()
-            ax.text(bar.get_x() + bar.get_width()/2., height, f'{height:.4f}',
+            ax.text(bar.get_x() + bar.get_width()/2., height + 0.02, f'{height:.4f}',
                     ha='center', va='bottom', fontsize=9, fontweight='bold')
     
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
@@ -330,8 +373,11 @@ else:
 
     colors = ['skyblue' if t == 'Deep Learning' else 'orange' for t in df['Type']]
     bars = ax1.bar(df['Model'], df['Accuracy'] * 100, color=colors, alpha=0.6, label='Accuracy')
+    
     ax1.set_ylabel('Accuracy (%)', color='blue')
-    ax1.set_ylim(80, 100)
+    # Smart zoom for Trade-off chart too
+    min_acc = (df['Accuracy'].min() * 100) - 2
+    ax1.set_ylim(max(0, min_acc), 100.5)
     
     ax2 = ax1.twinx()
     ax2.plot(df['Model'], df['Latency (ms)'], color='red', marker='o', linewidth=2, label='Inference Time (ms)')
