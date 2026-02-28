@@ -115,7 +115,7 @@ class ConvResNet(nn.Module):
         self.layer3 = ProperResidualBlock(64, 128, stride=2)
         
         # Final Classification
-        self.avg_pool = nn.AdaptiveAvgPool2d((1, 1)) # Global Average Pooling
+        self.avg_pool = nn.AdaptiveAvgPool2d((1, 1)) #6 Global Average Pooling
         self.fc = nn.Linear(128, num_classes)
 
     def forward(self, x):
